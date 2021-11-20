@@ -1,6 +1,16 @@
 package com.stupidbeauty.rotatingactiveuser;
 
-import com.koushikdutta.async.*;
+import com.upokecenter.cbor.CBORObject;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.IOFileFilter;
+import org.apache.commons.io.filefilter.TrueFileFilter;
+import com.koushikdutta.async.AsyncSocket;
+import com.koushikdutta.async.AsyncServer;
+import com.koushikdutta.async.DataEmitter;
+import com.koushikdutta.async.ByteBufferList;
+import com.koushikdutta.async.Util;
+import com.koushikdutta.async.http.WebSocket;
+import com.koushikdutta.async.http.AsyncHttpClient;
 import java.net.InetSocketAddress;
 import com.koushikdutta.async.callback.ConnectCallback;
 import android.os.Handler;
@@ -28,7 +38,7 @@ import java.net.UnknownHostException;
 public class RotatingActiveUserClient
 {
     private AsyncSocket socket; //!< 当前的客户端连接。
-    private static final String TAG ="ControlConnectHandler"; //!<  输出调试信息时使用的标记。
+    private static final String TAG ="RotatingActiveUserClient"; //!<  输出调试信息时使用的标记。
     private Context context; //!< 执行时使用的上下文。
     private AsyncSocket data_socket; //!< 当前的数据连接。
     private byte[] dataSocketPendingByteArray=null; //!< 数据套接字数据内容 排队。
@@ -39,6 +49,9 @@ public class RotatingActiveUserClient
     private boolean isUploading=false; //!< 是否正在上传。陈欣
     private InetAddress host;
     private File rootDirectory=null; //!< 根目录。
+    private AsyncHttpClient mAsyncHttpClient=null; //!< 异步超文本传输协议客户端对象。
+    private AsyncHttpClient.WebSocketConnectCallback mWebSocketConnectCallback=null; //!< 网页套接字连接回调对象。
+    private WebSocket serverRequestWebSocket=null; //!< 用于向服务器发送消息的网页套接字。
     
     public void setRootDirectory(File root)
     {
@@ -231,7 +244,59 @@ public class RotatingActiveUserClient
     public void reportActiveUser()
     {
         String result=""; // 结果。
+        
+        dataSocketPendingByteArray=constructReportActiveUserMessage(); // 构造消息。
+        
+        sendRequest(); // 发送消息。
     } //private String getDirectoryContentList(String wholeDirecotoryPath)
+    
+    /**
+    * 构造消息。
+    */
+    private byte[] constructReportActiveUserMessage() 
+    {
+        String body=context.getPackageName(); // 获取本个应用的包名。
+
+        Log.d(TAG, "constructReportActiveUserMessage, package name: " + body); //Debug.
+
+//         陈欣
+        VoiceCommandHitDataObject translateRequestBuilder = new VoiceCommandHitDataObject(); //创建消息构造器。
+
+        translateRequestBuilder.setPackageName(body); //设置包名。
+
+        boolean addPhotoFile=false; //Whether to add photo file
+
+        if (addPhotoFile) //Should add photo file
+        {
+            //随机选择一张照片并复制：
+            try //尝试构造请求对象，并且捕获可能的异常。
+            {
+                byte[] photoBytes= null; //将照片文件内容全部读取。
+
+                long eventTimeStamp=System.currentTimeMillis(); //获取时间戳。
+
+                translateRequestBuilder.setPictureFileContent(photoBytes); //设置照片文件内容。
+            } //try //尝试构造请求对象，并且捕获可能的异常。
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        } //if (addPhotoFile) //Should add photo file
+        else //Should not add photof ile
+        {
+        } //else //Should not add photof ile
+
+        CBORObject cborObject= CBORObject.FromObject(translateRequestBuilder); //创建对象
+
+        byte[] array=cborObject.EncodeToBytes();
+
+        String arrayString=new String(array);
+
+        Log.d(TAG, "constructVoiceCommandHistDataMessageCbor, message array lngth: " + array.length); //Debug.
+
+        return array;
+
+    } //private byte[] constructReportActiveUserMessage()
     
     /**
     * 获取文件或目录的权限。
@@ -384,23 +449,6 @@ public class RotatingActiveUserClient
 
             sendStringInBinaryMode(replyString);
         } //else if (command.equals("PASV")) // 被动传输
-        else if (command.equals("EPSV")) // 扩展被动模式
-        {
-            //        elsif command=='EPSV'
-//        send_data "202 \n"
-
-            String replyString="202 \n"; // 回复内容。
-
-            Log.d(TAG, "reply string: " + replyString); //Debug.
-
-            Util.writeAll(socket, replyString.getBytes(), new CompletedCallback() {
-                @Override
-                public void onCompleted(Exception ex) {
-                    if (ex != null) throw new RuntimeException(ex);
-                    System.out.println("[Server] Successfully wrote message");
-                }
-            });
-        } //else if (command.equals("EPSV")) // 扩展被动模式
         else if (command.equals("PORT")) // 要求服务器主动连接客户端的端口
         {
             String replyString="150 \n"; // 回复内容。正在打开数据连接
@@ -748,53 +796,52 @@ ex.printStackTrace(); // 报告错误。
             } //public void onCompleted(Exception ex) 
         });
     } //private void handleAccept(final AsyncSocket socket)
+    
+    /**
+    * 发送消息。
+    */
+    private void sendRequest() 
+    {
+        if ((serverRequestWebSocket!=null) && (dataSocketPendingByteArray!=null))
+        {
+            serverRequestWebSocket.send(dataSocketPendingByteArray); // 发送。
+            
+            dataSocketPendingByteArray=null; // 清空历史。
+        }
+    } //private void sendRequest()
 
-            /**
+    /**
      * 启动数据传输服务器。
      */
     private void setupDataServer()
     {
-        Random random=new Random(); //随机数生成器。
-
-        int randomIndex=random.nextInt(65535-1025)+1025; //随机选择一个端口。
-
-        data_port=randomIndex; 
-
-//         try // 绑定端口。
-//         {
-        AsyncServer.getDefault().listen(host, data_port, new ListenCallback() {
-            @Override
-            public void onAccepted(final AsyncSocket socket)
-            {
-                handleDataAccept(socket);
-            } //public void onAccepted(final AsyncSocket socket)
-
-            @Override
-            public void onListening(AsyncServerSocket socket)
-            {
-                System.out.println("[Server] Server started listening for data connections");
+    mWebSocketConnectCallback = new AsyncHttpClient.WebSocketConnectCallback() {
+        @Override
+        public void onCompleted(Exception ex, WebSocket webSocket) {
+            if (ex != null) {
+                ex.printStackTrace();
+                return;
             }
-
-            @Override
-            public void onCompleted(Exception ex) {
-                if(ex != null) {
-//                 09-07 07:57:47.473 18998 19023 W System.err: java.lang.RuntimeException: java.net.BindException: Address already in use
-
-//                 throw new RuntimeException(ex);
-ex.printStackTrace();
-
-                    setupDataServer(); // 重新初始化。
-                }
-                else
-                {
-                System.out.println("[Server] Successfully shutdown server");
-                }
-                
-            }
-        });
-//         }
-//         catch (BindException e)
-//         {
-//         } //catch (BindException e)
+            
+            serverRequestWebSocket=webSocket;
+            
+            sendRequest(); // 发送消息。
+            
+//             webSocket.send("Hello Server");
+//             webSocket.setStringCallback(new WebSocket.StringCallback() {
+//                 @Override
+//                 public void onStringAvailable(String s) {
+//                     Log.d("CLIENTTAG",s);
+//                     Toast.makeText(getApplicationContext(), s, Toast.LENGTH_SHORT).show();
+//                 }
+//             });
+        }
+    };
+    
+    String hostAddress = "192.168.0.109";
+    hostAddress = "http://" + hostAddress + ":" +13303;
+    
+    mAsyncHttpClient = AsyncHttpClient.getDefaultInstance();
+    mAsyncHttpClient.websocket(hostAddress, null, mWebSocketConnectCallback);
     } //private void setupDataServer()
 }

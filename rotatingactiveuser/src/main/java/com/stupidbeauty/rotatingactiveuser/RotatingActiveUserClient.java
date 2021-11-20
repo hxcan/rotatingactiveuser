@@ -65,11 +65,9 @@ public class RotatingActiveUserClient
         }
     } //private void                         receiveDataSocket( ByteBufferList bb)
 
-    public RotatingActiveUserClient(Context context, boolean allowActiveMode, InetAddress host)
+    public RotatingActiveUserClient(Context context)
     {
         this.context=context;
-        this.allowActiveMode=allowActiveMode;
-        this.host=host;
 
         setupDataServer(); // 启动数据传输服务器。
     }

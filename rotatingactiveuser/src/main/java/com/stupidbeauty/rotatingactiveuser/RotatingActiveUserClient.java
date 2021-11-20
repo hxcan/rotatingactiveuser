@@ -209,27 +209,6 @@ public class RotatingActiveUserClient
         Log.d(TAG, "sendListContent, rootDirectory: " + rootDirectory); // Debug.
         
         String wholeDirecotoryPath= rootDirectory.getPath() + currentWorkingDirectory; // 构造完整路径。
-
-        String output = getDirectoryContentList(wholeDirecotoryPath, parameter); // Get the whole directory list.
-        
-        Log.d(TAG, "output: " + output); // Debug
-        
-        if (data_socket!=null) // 数据连接存在
-        {
-            Util.writeAll(data_socket, (output + "\n").getBytes(), new CompletedCallback() {
-            @Override
-            public void onCompleted(Exception ex) {
-                if (ex != null) throw new RuntimeException(ex);
-                System.out.println("[Server] data Successfully wrote message");
-                
-                notifyLsCompleted(); // 告知已经发送目录数据。
-            }
-        });
-        } //if (data_socket!=null)
-        else // 数据连接不存在
-        {
-            queueForDataSocket(output); // 将回复数据排队。
-        } //else // 数据连接不存在
     } //private void sendListContent(String content, String currentWorkingDirectory)
 
     /**
@@ -249,55 +228,11 @@ public class RotatingActiveUserClient
     } //private void queueForDataSocket(String output)
 
     /**
-    *  获取目录的完整列表。
+    *  报告活跃用户。
     */
-    private String getDirectoryContentList(String wholeDirecotoryPath, String nameOfFile)
+    public void reportActiveUser()
     {
-        nameOfFile=nameOfFile.trim(); // 去除空白字符。陈欣
-    
         String result=""; // 结果。
-        File photoDirecotry= new File(wholeDirecotoryPath); //照片目录。
-            
-        File[]   paths = photoDirecotry.listFiles();
-         
-         // for each pathname in pathname array
-        for(File path:paths) 
-        {
-            // -rw-r--r-- 1 nobody nobody     35179727 Oct 16 07:31 VID_20201015_181816.mp4
-
-            String fileName=path.getName(); // 获取文件名。
-
-            Date date=new Date(path.lastModified());  
-                            
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
-//   String time= date.format(formatter);
-            String time="8:00";
-
-            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM");
-
-            String dateString="30";
-                            
-            long fileSize=path.length(); // 文件尺寸。
-                            
-            String group="cx";
-                            
-            String user = "ChenXin";
-                            
-            String linkNumber="1";
-                            
-//             String permission="-rw-r--r--"; // 权限。
-            String permission=getPermissionForFile(path); // 权限。
-
-            String month="Jan"; // 月份 。
-            String currentLine = permission + " " + linkNumber + " " + user + " " + group + " " + fileSize + " " + month + " " + dateString + " " + time + " " + fileName + "\n" ; // 构造当前行。
-            
-            if (fileName.equals(nameOfFile)  || (nameOfFile.isEmpty())) // 名字匹配。
-            {
-            result=result+currentLine; // 构造结果。
-            } //if (fileName.equals(nameOfFile)) // 名字匹配。
-         }
-
-         return result;
     } //private String getDirectoryContentList(String wholeDirecotoryPath)
     
     /**

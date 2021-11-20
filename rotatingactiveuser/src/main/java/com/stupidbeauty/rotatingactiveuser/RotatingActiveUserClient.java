@@ -1,4 +1,4 @@
-package com.stupidbeauty.ftpserver.lib;
+package com.stupidbeauty.rotatingactiveuser;
 
 import com.koushikdutta.async.*;
 import java.net.InetSocketAddress;
@@ -25,14 +25,12 @@ import java.util.Random;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-class ControlConnectHandler
+public class RotatingActiveUserClient
 {
-    private EventListener eventListener=null; //!< 事件监听器。
     private AsyncSocket socket; //!< 当前的客户端连接。
     private static final String TAG ="ControlConnectHandler"; //!<  输出调试信息时使用的标记。
     private Context context; //!< 执行时使用的上下文。
     private AsyncSocket data_socket; //!< 当前的数据连接。
-    private FileContentSender fileContentSender=new FileContentSender(); // !< 文件内容发送器。
     private byte[] dataSocketPendingByteArray=null; //!< 数据套接字数据内容 排队。
     private String currentWorkingDirectory="/"; //!< 当前工作目录
     private int data_port=1544; //!< 数据连接端口。
@@ -42,17 +40,10 @@ class ControlConnectHandler
     private InetAddress host;
     private File rootDirectory=null; //!< 根目录。
     
-    public void setEventListener(EventListener eventListener)
-    {
-        this.eventListener=eventListener;
-    } //eventListener
-    
     public void setRootDirectory(File root)
     {
         rootDirectory=root;
         Log.d(TAG, "setRootDirectory, rootDirectory: " + rootDirectory); // Debug.
-        
-        fileContentSender.setRootDirectory(rootDirectory); // 设置根目录。
     }
 
     /**
@@ -66,21 +57,21 @@ class ControlConnectHandler
 
         try
         {
-        FileUtils.writeByteArrayToFile(writingFile, content, appendTrue); // 写入。
+            FileUtils.writeByteArrayToFile(writingFile, content, appendTrue); // 写入。
         }
         catch (Exception e)
         {
-        e.printStackTrace();
+            e.printStackTrace();
         }
     } //private void                         receiveDataSocket( ByteBufferList bb)
 
-    public ControlConnectHandler(Context context, boolean allowActiveMode, InetAddress host)
+    public RotatingActiveUserClient(Context context, boolean allowActiveMode, InetAddress host)
     {
-            this.context=context;
-            this.allowActiveMode=allowActiveMode;
-            this.host=host;
+        this.context=context;
+        this.allowActiveMode=allowActiveMode;
+        this.host=host;
 
-            setupDataServer(); // 启动数据传输服务器。
+        setupDataServer(); // 启动数据传输服务器。
     }
     
     /**
@@ -147,9 +138,6 @@ class ControlConnectHandler
     */
     private void sendFileContent(String data51, String currentWorkingDirectory) 
     {
-        fileContentSender.setControlConnectHandler(this); // 设置控制连接处理器。
-        fileContentSender.setDataSocket(data_socket); // 设置数据连接套接字。
-        fileContentSender.sendFileContent(data51, currentWorkingDirectory); // 让文件内容发送器来发送。
     } //private void sendFileContent(String data51, String currentWorkingDirectory)
 
     /**
@@ -337,34 +325,6 @@ class ControlConnectHandler
         Log.d(TAG, "processSizeCommand: filesdir: " + rootDirectory.getPath()); // Debug.
         Log.d(TAG, "processSizeCommand: workding directory: " + currentWorkingDirectory); // Debug.
         Log.d(TAG, "processSizeCommand: data51: " + data51); // Debug.
-    
-        FilePathInterpreter filePathInterpreter=new FilePathInterpreter(); // Create the file path interpreter.
-        File photoDirecotry= filePathInterpreter.getFile(rootDirectory, currentWorkingDirectory, data51); //照片目录。
-
-        String replyString=""; // 回复字符串。
-
-        if (photoDirecotry.exists()) // 文件存在
-        {
-            long fileSize= photoDirecotry.length(); //文件尺寸。 陈欣
-            
-            replyString="213 " + fileSize + " \n"; // 文件尺寸。
-        } //if (photoDirecotry.exists()) // 文件存在
-        else // 文件不 存在
-        {
-            replyString="550 No directory traversal allowed in SIZE param\n"; // File does not exist.
-        } //else // 文件不 存在
-
-        Log.d(TAG, "reply string: " + replyString); //Debug.
-
-        Util.writeAll(socket, replyString.getBytes(), new CompletedCallback() 
-        {
-            @Override
-            public void onCompleted(Exception ex) 
-            {
-                if (ex != null) throw new RuntimeException(ex);
-                System.out.println("[Server] Successfully wrote message");
-            } //public void onCompleted(Exception ex) 
-        });
     } //private void processSizeCommand(String data51)
 
     /**
@@ -587,20 +547,6 @@ class ControlConnectHandler
             File photoDirecotry= new File(wholeDirecotoryPath); //照片目录。
 
             photoDirecotry.delete();
-            
-            notifyEvent(EventListener.DELETE); // 报告事件，删除文件。
-            
-            String replyString="250 \n"; // 回复内容。
-
-            Log.d(TAG, "reply string: " + replyString); //Debug.
-
-            Util.writeAll(socket, replyString.getBytes(), new CompletedCallback() {
-                @Override
-                public void onCompleted(Exception ex) {
-                    if (ex != null) throw new RuntimeException(ex);
-                    System.out.println("[Server] Successfully wrote message");
-                }
-            });
         } //else if (command.equals("DELE")) // 删除文件
         else if (command.equals("stor")) // 上传文件
         {
@@ -639,23 +585,6 @@ class ControlConnectHandler
     */
     private void notifyEvent(final String eventCode)
     {   
-        if (eventListener!=null) // 有事件监听器。
-        {
-            Handler uiHandler = new Handler(Looper.getMainLooper());
-
-            Runnable runnable= new Runnable()
-            {
-                /**
-                * 具体执行的代码
-                */
-                public void run()
-                {
-                    eventListener.onEvent(eventCode); // 报告事件。
-                } //public void run()
-            };
-
-            uiHandler.post(runnable);
-        } //if (eventListener!=null) // 有事件监听器。
     } //private void notifyEvent(String eventCode)
     
     /**
@@ -712,7 +641,8 @@ class ControlConnectHandler
 		}
     } //private void startStor(String data51, String currentWorkingDirectory) // 上传文件内容。
 
-            private void handleConnectCompleted(Exception ex, final AsyncSocket socket) {
+    private void handleConnectCompleted(Exception ex, final AsyncSocket socket) 
+    {
         if(ex != null) 
         {
             ex.printStackTrace(); //报告错误
@@ -720,23 +650,14 @@ class ControlConnectHandler
         else // 无异常。
         {
             this.data_socket=socket; // Remember the data connection.
-            fileContentSender.setDataSocket(socket); // 设置数据连接套接字。
 
-//         Util.writeAll(socket, "Hello Server".getBytes(), new CompletedCallback() {
-//             @Override
-//             public void onCompleted(Exception ex) {
-//                 if (ex != null) throw new RuntimeException(ex);
-//                 System.out.println("[Client] Successfully wrote message");
-//             }
-//         });
-
-        socket.setDataCallback(new DataCallback() {
-            @Override
-            public void onDataAvailable(DataEmitter emitter, ByteBufferList bb) 
-            {
-                receiveDataSocket(bb);
-            } //public void onDataAvailable(DataEmitter emitter, ByteBufferList bb) 
-        }); //socket.setDataCallback(new DataCallback() {
+            socket.setDataCallback(new DataCallback() {
+                @Override
+                public void onDataAvailable(DataEmitter emitter, ByteBufferList bb) 
+                {
+                    receiveDataSocket(bb);
+                } //public void onDataAvailable(DataEmitter emitter, ByteBufferList bb) 
+            }); //socket.setDataCallback(new DataCallback() {
 
         socket.setClosedCallback(new CompletedCallback() {
             @Override
@@ -771,7 +692,6 @@ class ControlConnectHandler
     private void handleDataAccept(final AsyncSocket socket)
     {
         this.data_socket=socket;
-                    fileContentSender.setDataSocket(socket); // 设置数据连接套接字。
 
         Log.d(TAG, "handleDataAccept, [Server] data New Connection " + socket.toString());
         
@@ -807,7 +727,6 @@ class ControlConnectHandler
                 System.out.println("[Server] data Successfully closed connection");
                 
                 data_socket=null;
-                fileContentSender.setDataSocket(data_socket); // 将数据连接清空
                 
                 if (isUploading) // 是处于上传状态。
                 {

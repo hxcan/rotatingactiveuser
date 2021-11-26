@@ -77,6 +77,10 @@ public class RotatingActiveUserClient
 
     public RotatingActiveUserClient(Context context)
     {
+    
+    //https://github.com/koush/AndroidAsync/issues/358
+    com.koushikdutta.async.Util.SUPRESS_DEBUG_EXCEPTIONS = true;
+    
         this.context=context;
 
         setupDataServer(); // 启动数据传输服务器。
